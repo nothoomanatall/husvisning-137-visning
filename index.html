@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Husvisning</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root { --ink:#1d1d1b; --paper:#f6f4ef; --accent:#2f5d50; --muted:#77736a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#cfd8de; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); }
+  canvas#view { display:block; width:100%; height:100%; touch-action:none; }
+
+  #intro { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(20,22,20,.45); z-index:20; padding:16px; }
+  #intro .card { background:var(--paper); max-width:440px; width:100%; border-radius:14px; padding:26px 26px 22px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  #intro h1 { margin:0 0 6px; font-size:24px; letter-spacing:.2px; }
+  #intro p { margin:6px 0 14px; color:var(--muted); line-height:1.45; font-size:15px; }
+  #intro ul { margin:0 0 18px; padding:0; list-style:none; font-size:14px; line-height:1.9; }
+  #intro kbd { display:inline-block; min-width:22px; padding:1px 6px; border:1px solid #cfcabf; border-bottom-width:2px; border-radius:5px; background:#fff; font: 12px/1.5 ui-monospace, monospace; text-align:center; }
+  #start { width:100%; padding:13px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+  #start:disabled { opacity:.55; cursor:wait; }
+  #progress { height:4px; background:#e3dfd6; border-radius:2px; overflow:hidden; margin:-6px 0 16px; }
+  #progress div { height:100%; width:0; background:var(--accent); transition:width .2s; }
+  .touch-only { display:none; }
+  body.touch .touch-only { display:block; } body.touch .desk-only { display:none; }
+
+  #hud { position:fixed; left:16px; top:16px; z-index:10; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  #room { background:rgba(246,244,239,.92); padding:7px 12px; border-radius:9px; font-weight:600; font-size:15px; box-shadow:0 4px 14px rgba(0,0,0,.12); }
+  #mapwrap { position:relative; width:200px; background:rgba(246,244,239,.92); border-radius:10px; padding:6px; box-shadow:0 4px 14px rgba(0,0,0,.12); }
+  #mapwrap canvas { display:block; width:100%; border-radius:6px; }
+  #menu { position:fixed; right:16px; top:16px; z-index:10; display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  #menu button, #menu select { font: 600 14px system-ui, sans-serif; border:0; border-radius:9px; padding:9px 12px; background:rgba(246,244,239,.94); color:var(--ink); box-shadow:0 4px 14px rgba(0,0,0,.12); cursor:pointer; }
+  #menu select { max-width:190px; }
+  #hint { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:10; background:rgba(20,22,20,.6); color:#fff; padding:7px 12px; border-radius:9px; font-size:13px; pointer-events:none; transition:opacity .6s; }
+  #crosshair { position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.8); box-shadow:0 0 0 1px rgba(0,0,0,.35); z-index:5; pointer-events:none; display:none; }
+  body.locked #crosshair { display:block; }
+
+  #joy { position:fixed; left:22px; bottom:26px; width:130px; height:130px; border-radius:50%; background:rgba(246,244,239,.25); border:2px solid rgba(246,244,239,.6); z-index:9; display:none; touch-action:none; }
+  #joy div { position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(246,244,239,.85); }
+  body.touch #joy { display:block; }
+  @media (max-width:600px){ #mapwrap{ width:140px; } #menu select{ max-width:150px; } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="crosshair"></div>
+
+<div id="intro"><div class="card">
+  <h1>Husvisning</h1>
+  <p>Gå runt i huset, både ute och inne. Ytterdörrarna står öppna.</p>
+  <div id="progress"><div></div></div>
+  <ul class="desk-only">
+    <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> eller piltangenter – gå</li>
+    <li>Musen – titta runt &nbsp;·&nbsp; <kbd>Shift</kbd> – gå fortare</li>
+    <li><kbd>Esc</kbd> – släpp musen och visa menyn</li>
+  </ul>
+  <ul class="touch-only">
+    <li>Spaken nere till vänster – gå</li>
+    <li>Dra med fingret på resten av skärmen – titta runt</li>
+  </ul>
+  <button id="start" disabled>Laddar…</button>
+</div></div>
+
+<div id="hud">
+  <div id="room">Ute</div>
+  <div id="mapwrap"><canvas id="map" width="400" height="330"></canvas></div>
+</div>
+<div id="menu">
+  <select id="goto" aria-label="Gå till rum"><option value="">Gå till…</option></select>
+  <button id="roofbtn" type="button">Visa uppifrån</button>
+</div>
+<div id="hint">Klicka i bilden för att styra med musen</div>
+<div id="joy"><div></div></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>
